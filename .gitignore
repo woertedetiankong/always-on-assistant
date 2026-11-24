@@ -1,0 +1,7 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
+# written by the 1a demo script
+episodes/*/data/*.json
