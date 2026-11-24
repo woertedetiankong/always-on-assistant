@@ -46,6 +46,10 @@ cd assistant
 uv run --env-file .env python bot.py
 ```
 
+The first time an agent runs, Pydantic AI prints a banner (a small logo and a pointer to its observability
+tool) above the bot's own output. That is normal and the videos leave it out; set `PYDANTIC_AI_NO_BANNER=1`
+to hide it.
+
 Never paste a traceback from the bot in public without reading it first: an httpx error message prints the
 full request address, and the address contains your token. If a token leaks, send `/revoke` to @BotFather.
 

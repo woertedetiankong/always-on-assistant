@@ -44,6 +44,9 @@ cd assistant
 uv run --env-file .env python bot.py
 ```
 
+agent 第一次运行时，Pydantic AI 会在机器人自己的输出上面打印一段横幅（一个小图标，加上它的可观测性工具的介绍）。
+这是正常的，视频里没有展示；设置 `PYDANTIC_AI_NO_BANNER=1` 可以关掉它。
+
 不要没看过就把机器人的报错贴到公开的地方：httpx 的报错信息会打印完整的请求地址，地址里就有你的 token。
 token 万一泄露，给 @BotFather 发 `/revoke`。
 
