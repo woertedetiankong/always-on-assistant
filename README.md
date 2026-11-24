@@ -55,3 +55,7 @@ The videos read the framework's own source, pinned at
 [pydantic/pydantic-ai v2.71.0](https://github.com/pydantic/pydantic-ai/tree/v2.71.0), the same version
 `assistant/pyproject.toml` installs, so every `file:line` on screen matches what you have.
 This course is not affiliated with or endorsed by Pydantic.
+
+## License
+
+[MIT](LICENSE)

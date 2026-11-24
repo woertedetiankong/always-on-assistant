@@ -53,3 +53,7 @@ token 万一泄露，给 @BotFather 发 `/revoke`。
 [pydantic/pydantic-ai v2.71.0](https://github.com/pydantic/pydantic-ai/tree/v2.71.0)，
 和 `assistant/pyproject.toml` 安装的是同一个版本，所以屏幕上的每个 `文件:行号` 都和你本地的一致。
 本课程与 Pydantic 无关联，也未获其背书。
+
+## 许可
+
+[MIT](LICENSE)
