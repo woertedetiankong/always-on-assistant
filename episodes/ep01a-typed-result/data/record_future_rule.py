@@ -24,8 +24,8 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 os.environ.setdefault('GOOGLE_API_KEY', 'placeholder-staged-run-makes-no-request')
 models.ALLOW_MODEL_REQUESTS = False
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'assistant'))
-import bot  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'assistant' / 'history'))
+import bot_ep01a as bot  # noqa: E402  # this episode's own snapshot: assistant/bot.py moves on with later episodes
 
 
 class FutureReply(bot.Reply):

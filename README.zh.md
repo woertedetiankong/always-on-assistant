@@ -15,19 +15,19 @@ uv run pytest
 ```
 
 第一次运行会安装 Python 3.13 和依赖。测试用替身模型和替身 Telegram，不需要 API key，也不需要 token。
-刚拿到时有一部分测试是失败的：失败的就是作业。
+在 `main` 上测试全部通过：`main` 是做好的助理。
 
 ## 各集
 
-| 集 | 标题 | 视频结束时的 `bot.py` | 作业 | 测试 | 开始之前 |
+| 集 | 标题 | 开始做作业 | 作业 | 测试 | 刚开始时 |
 |---|---|---|---|---|---|
-| 1a | 一条消息进，一个带类型的结果出 | `history/bot_ep01a.py` | [assignments/ep01a.zh.md](assignments/ep01a.zh.md) | `tests/test_ep01a.py` | 4 个通过, 5 个失败 |
-| 1b | 把它接到 Telegram 上 | `history/bot_ep01b.py` | [assignments/ep01b.zh.md](assignments/ep01b.zh.md) | `tests/test_ep01b.py` | 6 个通过, 5 个失败 |
+| 1a | 一条消息进，一个带类型的结果出 | `git checkout ep01a-start` | [assignments/ep01a.zh.md](assignments/ep01a.zh.md) | `tests/test_ep01a.py` | 4 个通过, 5 个失败 |
+| 1b | 把它接到 Telegram 上 | `git checkout ep01b-start` | [assignments/ep01b.zh.md](assignments/ep01b.zh.md) | `tests/test_ep01b.py` | 6 个通过, 5 个失败 |
+| 2a | 读日历：第一个工具 | `git checkout ep02a-start` | [assignments/ep02a.zh.md](assignments/ep02a.zh.md) | `tests/test_ep02a.py` | 4 个通过, 7 个失败 |
 
-`assistant/bot.py` 是最新一集视频结束时的机器人。想从更早的一集开始，把那一集的文件拷过来，
-例如 `cp history/bot_ep01a.py bot.py`。早先各集的测试也能对着最新的 `bot.py` 运行。
-
-仓库里没有答案：测试会告诉你作业做完了没有。
+`main` 是最新一集之后的助理，已发布各集的作业都已做完：它就是产品，也是你自己做过之后对照答案的地方。
+要做作业，先切到那一集的起点 tag，例如 `git checkout ep02a-start`。在那里 `assistant/bot.py`
+和那一集视频结束时完全一样，那一集的测试按作业说明失败。`assistant/history/bot_epNN.py` 也保存着每一集视频结束时的代码。
 
 ## 运行真的机器人
 
@@ -37,6 +37,7 @@ uv run pytest
 GOOGLE_API_KEY=...        # Gemini 的 API key；视频里用的是 google:gemini-3.8-flash
 TELEGRAM_BOT_TOKEN=...    # 找 Telegram 里的 @BotFather 要，第 1b 集开始需要
 TELEGRAM_OWNER_ID=...     # 你自己的 chat id，做完 1b 的作业之后需要
+CALENDAR_ICS_URL=...      # 日历的 iCal 私密地址，第 2a 集开始需要；它和 token 一样是秘密
 ```
 
 ```sh

@@ -16,20 +16,20 @@ uv run pytest
 ```
 
 The first run installs Python 3.13 and the dependencies. The tests use a stand-in model and a stand-in
-Telegram, so they need no API key and no token. As shipped, some tests fail: the failing ones are the assignments.
+Telegram, so they need no API key and no token. On `main` they all pass: `main` is the finished assistant.
 
 ## Episodes
 
-| Episode | Title | `bot.py` as the video ends | Assignment | Tests | Before you start |
+| Episode | Title | Start the assignment | Assignment | Tests | At the start |
 |---|---|---|---|---|---|
-| 1a | One message in, one typed result out | `history/bot_ep01a.py` | [assignments/ep01a.md](assignments/ep01a.md) | `tests/test_ep01a.py` | 4 pass, 5 fail |
-| 1b | Put it on Telegram | `history/bot_ep01b.py` | [assignments/ep01b.md](assignments/ep01b.md) | `tests/test_ep01b.py` | 6 pass, 5 fail |
+| 1a | One message in, one typed result out | `git checkout ep01a-start` | [assignments/ep01a.md](assignments/ep01a.md) | `tests/test_ep01a.py` | 4 pass, 5 fail |
+| 1b | Put it on Telegram | `git checkout ep01b-start` | [assignments/ep01b.md](assignments/ep01b.md) | `tests/test_ep01b.py` | 6 pass, 5 fail |
+| 2a | Read the calendar: the first tool | `git checkout ep02a-start` | [assignments/ep02a.md](assignments/ep02a.md) | `tests/test_ep02a.py` | 4 pass, 7 fail |
 
-`assistant/bot.py` is the bot as the latest episode's video ends. To start an earlier episode from its own
-video, copy that episode's file over it, for example `cp history/bot_ep01a.py bot.py`. The tests of earlier
-episodes also run against the latest `bot.py`.
-
-There are no solutions in this repository: the tests tell you when an assignment is done.
+`main` is the assistant as it stands after the latest episode, with every published assignment solved: it is
+the product, and the place to read a solution once you have tried. To do an assignment, check out the episode's
+start tag, for example `git checkout ep02a-start`. There `assistant/bot.py` is exactly as that video ends, and
+the episode's tests fail as its handout says. `assistant/history/bot_epNN.py` keeps each video's end state too.
 
 ## Running the real bot
 
@@ -39,6 +39,7 @@ The real bot needs a file `assistant/.env` (ignored by git; keep it that way):
 GOOGLE_API_KEY=...        # a Gemini API key; the videos use google:gemini-3.8-flash
 TELEGRAM_BOT_TOKEN=...    # from @BotFather in Telegram, from episode 1b on
 TELEGRAM_OWNER_ID=...     # your own chat id, after the 1b assignment
+CALENDAR_ICS_URL=...      # a calendar's secret iCal address, from episode 2a on: a secret, like the token
 ```
 
 ```sh
