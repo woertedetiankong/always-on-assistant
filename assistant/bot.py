@@ -1,4 +1,4 @@
-"""Lesson 2a: the assistant reads your calendar through its first tool."""
+"""The assistant after episode 2a, with the solutions of the 1a, 1b and 2a assignments."""
 
 import asyncio
 import os
@@ -9,7 +9,7 @@ import httpx
 import icalendar
 import recurring_ical_events
 from pydantic import BaseModel, StringConstraints, field_validator
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ModelRetry
 
 
 class Reply(BaseModel):
@@ -68,6 +68,10 @@ async def list_events(start: date, end: date) -> list[Event]:
         start: The first day.
         end: The last day.
     """
+    if end < start:
+        raise ModelRetry('end comes before start. end is the last day, included: for one day, give the same date twice.')
+    if (end - start).days >= 31:
+        raise ModelRetry('That is more than 31 days. Ask for 31 days or fewer at a time.')
     calendar = icalendar.Calendar.from_ical(await fetch_calendar())
     since = datetime.combine(start, time.min).astimezone()
     until = datetime.combine(end + timedelta(days=1), time.min).astimezone()
@@ -76,6 +80,36 @@ async def list_events(start: date, end: date) -> list[Event]:
         for found in recurring_ical_events.of(calendar).between(since, until)
     ]
     return sorted(events, key=lambda event: (isinstance(event.start, datetime), event.start))
+
+
+class Slot(BaseModel):
+    """A stretch of free time."""
+
+    start: datetime
+    end: datetime
+
+
+@agent.tool_plain
+async def find_free_time(day: date, minutes: int) -> list[Slot]:
+    """Find free time on one day, between 9:00 and 18:00 in the owner's time zone.
+
+    Args:
+        day: The day to look at.
+        minutes: The shortest free time worth returning, in minutes.
+    """
+    opens = datetime.combine(day, time(9)).astimezone()
+    closes = datetime.combine(day, time(18)).astimezone()
+    long_enough = timedelta(minutes=minutes)
+    free, cursor = [], opens
+    for event in await list_events(day, day):
+        if not isinstance(event.start, datetime):
+            continue  # an all-day event, such as a birthday, does not make you busy
+        if min(event.start, closes) - cursor >= long_enough:
+            free.append(Slot(start=cursor, end=min(event.start, closes)))
+        cursor = max(cursor, event.end)
+    if closes - cursor >= long_enough:
+        free.append(Slot(start=cursor, end=closes))
+    return free
 
 
 class Chat(BaseModel):
