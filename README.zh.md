@@ -24,6 +24,7 @@ uv run pytest
 | 1a | 一条消息进，一个带类型的结果出 | `git checkout ep01a-start` | [assignments/ep01a.zh.md](assignments/ep01a.zh.md) | `tests/test_ep01a.py` | 4 个通过, 5 个失败 |
 | 1b | 把它接到 Telegram 上 | `git checkout ep01b-start` | [assignments/ep01b.zh.md](assignments/ep01b.zh.md) | `tests/test_ep01b.py` | 6 个通过, 5 个失败 |
 | 2a | 读日历：第一个工具 | `git checkout ep02a-start` | [assignments/ep02a.zh.md](assignments/ep02a.zh.md) | `tests/test_ep02a.py` | 4 个通过, 7 个失败 |
+| 2b | 读邮件：工具需要的东西 | `git checkout ep02b-start` | [assignments/ep02b.zh.md](assignments/ep02b.zh.md) | `tests/test_ep02b.py` | 7 个通过, 9 个失败 |
 
 `main` 是最新一集之后的助理，已发布各集的作业都已做完：它就是产品，也是你自己做过之后对照答案的地方。
 要做作业，先切到那一集的起点 tag，例如 `git checkout ep02a-start`。在那里 `assistant/bot.py`
@@ -38,6 +39,11 @@ GOOGLE_API_KEY=...        # Gemini 的 API key；视频里用的是 google:gemin
 TELEGRAM_BOT_TOKEN=...    # 找 Telegram 里的 @BotFather 要，第 1b 集开始需要
 TELEGRAM_OWNER_ID=...     # 你自己的 chat id，做完 1b 的作业之后需要
 CALENDAR_ICS_URL=...      # 日历的 iCal 私密地址，第 2a 集开始需要；它和 token 一样是秘密
+IMAP_HOST=imap.gmail.com  # 第 2b 集开始需要：邮件服务器
+IMAP_USER=...             # 你的邮箱地址
+IMAP_PASSWORD=...         # 应用专用密码（Gmail：myaccount.google.com/apppasswords）；是秘密
+IMAP_FOLDER=...           # 机器人只读的那一个标签，比如 assistant-demo
+TIME_ZONE=...             # 你的时区，比如 America/Los_Angeles，做完 2b 的作业之后需要
 ```
 
 ```sh

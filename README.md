@@ -25,6 +25,7 @@ Telegram, so they need no API key and no token. On `main` they all pass: `main` 
 | 1a | One message in, one typed result out | `git checkout ep01a-start` | [assignments/ep01a.md](assignments/ep01a.md) | `tests/test_ep01a.py` | 4 pass, 5 fail |
 | 1b | Put it on Telegram | `git checkout ep01b-start` | [assignments/ep01b.md](assignments/ep01b.md) | `tests/test_ep01b.py` | 6 pass, 5 fail |
 | 2a | Read the calendar: the first tool | `git checkout ep02a-start` | [assignments/ep02a.md](assignments/ep02a.md) | `tests/test_ep02a.py` | 4 pass, 7 fail |
+| 2b | Read email: what a tool needs | `git checkout ep02b-start` | [assignments/ep02b.md](assignments/ep02b.md) | `tests/test_ep02b.py` | 7 pass, 9 fail |
 
 `main` is the assistant as it stands after the latest episode, with every published assignment solved: it is
 the product, and the place to read a solution once you have tried. To do an assignment, check out the episode's
@@ -40,6 +41,11 @@ GOOGLE_API_KEY=...        # a Gemini API key; the videos use google:gemini-3.8-f
 TELEGRAM_BOT_TOKEN=...    # from @BotFather in Telegram, from episode 1b on
 TELEGRAM_OWNER_ID=...     # your own chat id, after the 1b assignment
 CALENDAR_ICS_URL=...      # a calendar's secret iCal address, from episode 2a on: a secret, like the token
+IMAP_HOST=imap.gmail.com  # from episode 2b on: the mail server
+IMAP_USER=...             # your email address
+IMAP_PASSWORD=...         # an app password (Gmail: myaccount.google.com/apppasswords): a secret
+IMAP_FOLDER=...           # the one label the bot reads, read-only, e.g. assistant-demo
+TIME_ZONE=...             # your time zone, e.g. America/Los_Angeles, after the 2b assignment
 ```
 
 ```sh

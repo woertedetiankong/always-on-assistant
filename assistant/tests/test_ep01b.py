@@ -14,6 +14,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart, User
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 import bot
+from fake_deps import make_deps
 from fake_telegram import OWNER, STRANGER, FakeTelegram
 
 
@@ -46,7 +47,7 @@ def poll(telegram: FakeTelegram, model: StandIn, offset: int = 0) -> int:
     async def go() -> int:
         async with telegram.client() as client:
             with bot.agent.override(model=FunctionModel(model)):
-                return await bot.poll_once(client, offset)
+                return await bot.poll_once(client, offset, make_deps())  # since 2b: what the tools need
 
     return asyncio.run(go())
 

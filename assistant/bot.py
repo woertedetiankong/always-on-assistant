@@ -1,7 +1,14 @@
-"""The assistant after episode 2a, with the solutions of the 1a, 1b and 2a assignments."""
+"""The assistant after episode 2b, with the solutions of the 1a, 1b and 2a assignments."""
 
 import asyncio
+import email
+import email.policy
+import imaplib
 import os
+import re
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Annotated, Any, Literal
 
@@ -9,7 +16,7 @@ import httpx
 import icalendar
 import recurring_ical_events
 from pydantic import BaseModel, StringConstraints, field_validator
-from pydantic_ai import Agent, ModelRetry
+from pydantic_ai import Agent, ModelRetry, RunContext
 
 
 class Reply(BaseModel):
@@ -27,8 +34,78 @@ class Reply(BaseModel):
         return due
 
 
+class Email(BaseModel):
+    """One email, without its body."""
+
+    uid: int
+    sender: str
+    subject: str
+    received: datetime
+    unread: bool
+
+
+def to_email(meta: bytes, header: bytes) -> Email:
+    """One FETCH answer: its UID and FLAGS, then the header lines that were asked for."""
+    message = email.message_from_bytes(header, policy=email.policy.default)
+    return Email(
+        uid=int(re.search(rb'UID (\d+)', meta)[1]),
+        sender=str(message['From']),
+        subject=str(message['Subject'] or ''),
+        received=message['Date'].datetime.astimezone(),
+        unread=b'\\Seen' not in imaplib.ParseFlags(meta),
+    )
+
+
+@dataclass
+class Mailbox:
+    """One folder of an IMAP mailbox, such as a Gmail label. The bot only ever opens it read-only."""
+
+    host: str
+    user: str
+    password: str = field(repr=False)
+    folder: str
+    connect: Callable[..., imaplib.IMAP4] = imaplib.IMAP4_SSL  # tests hand in a fake server
+
+    @contextmanager
+    def opened(self) -> Iterator[imaplib.IMAP4]:
+        """Log in and open the folder with EXAMINE: read-only, nothing in it can change."""
+        with self.connect(self.host, timeout=20) as imap:
+            imap.login(self.user, self.password)
+            status, _ = imap.select(f'"{self.folder}"', readonly=True)
+            if status != 'OK':
+                raise LookupError(f'there is no folder named {self.folder!r}')
+            yield imap
+
+    def search(self, text: str, since: date) -> list[Email]:
+        """The emails from `since` on that contain `text`, newest first, at most 20."""
+        criteria = ['SINCE', f'{since:%d-%b-%Y}']
+        with self.opened() as imap:
+            if text:  # Gmail refuses an empty TEXT ("infeasible query"): leave it out and list everything
+                imap.literal = text.encode()  # sent after TEXT as raw bytes: any language, any quote marks
+                criteria.append('TEXT')
+            status, found = imap.uid('SEARCH', 'CHARSET', 'UTF-8', *criteria)
+            if status != 'OK':  # a refusal's text is not a list of UIDs
+                raise LookupError(f'the server refused the search: {found[0].decode()}')
+            uids = found[0].split()[-20:]
+            if not uids:
+                return []
+            _, data = imap.uid('FETCH', b','.join(uids), '(FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])')
+        emails = [to_email(meta, header) for meta, header in (part for part in data if isinstance(part, tuple))]
+        return sorted(emails, key=lambda found: found.received, reverse=True)
+
+
+@dataclass
+class Deps:
+    """What the tools need from outside the run. main() makes it once; every run is handed it."""
+
+    http: httpx.AsyncClient
+    calendar_url: str
+    mailbox: Mailbox
+
+
 agent = Agent(
     'google:gemini-3.8-flash',
+    deps_type=Deps,
     output_type=Reply,
     instructions='You are a personal assistant. Decide what the message is, and write a short reply.',
 )
@@ -52,16 +129,15 @@ def to_local(value: datetime | date) -> datetime | date:
     return value.astimezone() if isinstance(value, datetime) else value
 
 
-async def fetch_calendar() -> bytes:
+async def fetch_calendar(deps: Deps) -> bytes:
     """Download the calendar file from its secret iCal address."""
-    async with httpx.AsyncClient(timeout=20) as http:
-        response = await http.get(os.environ['CALENDAR_ICS_URL'])
-        response.raise_for_status()
-        return response.content
+    response = await deps.http.get(deps.calendar_url)
+    response.raise_for_status()
+    return response.content
 
 
-@agent.tool_plain
-async def list_events(start: date, end: date) -> list[Event]:
+@agent.tool
+async def list_events(ctx: RunContext[Deps], start: date, end: date) -> list[Event]:
     """List the events on the owner's calendar from start to end, both days included.
 
     Args:
@@ -72,7 +148,7 @@ async def list_events(start: date, end: date) -> list[Event]:
         raise ModelRetry('end comes before start. end is the last day, included: for one day, give the same date twice.')
     if (end - start).days >= 31:
         raise ModelRetry('That is more than 31 days. Ask for 31 days or fewer at a time.')
-    calendar = icalendar.Calendar.from_ical(await fetch_calendar())
+    calendar = icalendar.Calendar.from_ical(await fetch_calendar(ctx.deps))
     since = datetime.combine(start, time.min).astimezone()
     until = datetime.combine(end + timedelta(days=1), time.min).astimezone()
     events = [
@@ -89,8 +165,8 @@ class Slot(BaseModel):
     end: datetime
 
 
-@agent.tool_plain
-async def find_free_time(day: date, minutes: int) -> list[Slot]:
+@agent.tool
+async def find_free_time(ctx: RunContext[Deps], day: date, minutes: int) -> list[Slot]:
     """Find free time on one day, between 9:00 and 18:00 in the owner's time zone.
 
     Args:
@@ -101,7 +177,7 @@ async def find_free_time(day: date, minutes: int) -> list[Slot]:
     closes = datetime.combine(day, time(18)).astimezone()
     long_enough = timedelta(minutes=minutes)
     free, cursor = [], opens
-    for event in await list_events(day, day):
+    for event in await list_events(ctx, day, day):
         if not isinstance(event.start, datetime):
             continue  # an all-day event, such as a birthday, does not make you busy
         if min(event.start, closes) - cursor >= long_enough:
@@ -110,6 +186,17 @@ async def find_free_time(day: date, minutes: int) -> list[Slot]:
     if closes - cursor >= long_enough:
         free.append(Slot(start=cursor, end=closes))
     return free
+
+
+@agent.tool
+def search_email(ctx: RunContext[Deps], text: str, since: date) -> list[Email]:
+    """Search the owner's email for messages that contain some text, newest first.
+
+    Args:
+        text: Words to look for in the sender, the subject and the body. Empty lists every email.
+        since: The first day to look at.
+    """
+    return ctx.deps.mailbox.search(text, since)
 
 
 class Chat(BaseModel):
@@ -139,7 +226,7 @@ OWNER_ID = int(os.environ['TELEGRAM_OWNER_ID']) if os.environ.get('TELEGRAM_OWNE
 """The one chat the bot answers. None answers everyone: use it once to find your own chat id."""
 
 
-async def poll_once(telegram: httpx.AsyncClient, offset: int) -> int:
+async def poll_once(telegram: httpx.AsyncClient, offset: int, deps: Deps) -> int:
     """Ask for the updates from `offset` on, answer each text message, return the next offset."""
     for raw in await call(telegram, 'getUpdates', offset=offset, timeout=30):
         update = Update.model_validate(raw)
@@ -150,7 +237,7 @@ async def poll_once(telegram: httpx.AsyncClient, offset: int) -> int:
         if OWNER_ID is not None and message.chat.id != OWNER_ID:
             continue
         try:
-            result = await agent.run(message.text)
+            result = await agent.run(message.text, deps=deps)
             text = result.output.text
         except Exception as error:
             # Only the type: an error's text can hold a request address, and so a token.
@@ -162,10 +249,13 @@ async def poll_once(telegram: httpx.AsyncClient, offset: int) -> int:
 
 async def main() -> None:
     url = f'https://api.telegram.org/bot{os.environ["TELEGRAM_BOT_TOKEN"]}/'
-    async with httpx.AsyncClient(base_url=url, timeout=40) as telegram:
+    calendar_url = os.environ['CALENDAR_ICS_URL']
+    mailbox = Mailbox(os.environ['IMAP_HOST'], os.environ['IMAP_USER'], os.environ['IMAP_PASSWORD'], os.environ['IMAP_FOLDER'])
+    async with httpx.AsyncClient(base_url=url, timeout=40) as telegram, httpx.AsyncClient(timeout=20) as http:
+        deps = Deps(http=http, calendar_url=calendar_url, mailbox=mailbox)
         offset = 0
         while True:
-            offset = await poll_once(telegram, offset)
+            offset = await poll_once(telegram, offset, deps)
 
 
 if __name__ == '__main__':

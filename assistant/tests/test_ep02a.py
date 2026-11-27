@@ -2,9 +2,12 @@
 
 Run from the assistant folder:   uv run pytest tests/test_ep02a.py
 
-No calendar address, no API key and no network are needed: every test swaps `bot.fetch_calendar`
-for the small calendar below, and a stand-in model plays a script of tool calls. The first four
-tests pass as soon as you have the code from the video. Parts 1 and 2 fail until you change bot.py.
+No calendar address, no API key and no network are needed: every test reads the small calendar
+below, and a stand-in model plays a script of tool calls. The first four tests pass as soon as you
+have the code from the video. Parts 1 and 2 fail until you change bot.py.
+
+Since episode 2b the tools take what they need from `ctx.deps`, so these tests hand the bot a Deps
+whose http client serves CALENDAR (fake_deps.py). Until 2b they swapped `bot.fetch_calendar` instead.
 """
 
 import asyncio
@@ -14,6 +17,7 @@ import pytest
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
+from fake_deps import context, make_deps
 from pydantic_ai.usage import UsageLimits
 
 import bot
@@ -52,16 +56,7 @@ END:VCALENDAR
 """
 DAY = date(2026, 12, 2)
 FINAL = ('final', {'kind': 'chat', 'text': 'Here is your day.'})
-
-
-@pytest.fixture(autouse=True)
-def test_calendar(monkeypatch: pytest.MonkeyPatch):
-    """Every test reads CALENDAR instead of downloading one."""
-
-    async def fetch() -> bytes:
-        return CALENDAR
-
-    monkeypatch.setattr(bot, 'fetch_calendar', fetch)
+DEPS = make_deps(calendar=CALENDAR)
 
 
 class Script:
@@ -85,7 +80,7 @@ class Script:
 
 def run(script: Script, prompt: str = "What's on my calendar tomorrow?", request_limit: int = 10):
     with bot.agent.override(model=FunctionModel(script)):
-        return bot.agent.run_sync(prompt, usage_limits=UsageLimits(request_limit=request_limit))
+        return bot.agent.run_sync(prompt, deps=DEPS, usage_limits=UsageLimits(request_limit=request_limit))
 
 
 def tool(script: Script, name: str):
@@ -120,7 +115,7 @@ def test_the_model_is_offered_list_events():
 
 
 def test_one_day_of_events_sorted_all_day_first():
-    events = asyncio.run(bot.list_events(DAY, DAY))
+    events = asyncio.run(bot.list_events(context(DEPS), DAY, DAY))
 
     assert [e.title for e in events] == ["Mom's birthday", 'Team sync', 'Dentist']
     assert events[0].start == DAY, 'an all-day event keeps a date, not a time'
@@ -165,7 +160,7 @@ def spans(slots) -> list[tuple[time, time]]:
 
 
 def test_free_time_of_at_least_an_hour():
-    slots = asyncio.run(bot.find_free_time(DAY, 60))
+    slots = asyncio.run(bot.find_free_time(context(DEPS), DAY, 60))
 
     assert spans(slots) == [(time(10), time(15)), (time(16), time(18))]
     assert all(isinstance(slot.start, datetime) and slot.start.date() == DAY for slot in slots)
@@ -173,8 +168,8 @@ def test_free_time_of_at_least_an_hour():
 
 def test_free_time_of_half_an_hour_and_an_empty_day():
     """An all-day event (the birthday) does not make you busy; a day with nothing on is free from 9 to 18."""
-    assert spans(asyncio.run(bot.find_free_time(DAY, 30))) == [(time(9), time(9, 30)), (time(10), time(15)), (time(16), time(18))]
-    assert spans(asyncio.run(bot.find_free_time(date(2026, 12, 5), 30))) == [(time(9), time(18))]
+    assert spans(asyncio.run(bot.find_free_time(context(DEPS), DAY, 30))) == [(time(9), time(9, 30)), (time(10), time(15)), (time(16), time(18))]
+    assert spans(asyncio.run(bot.find_free_time(context(DEPS), date(2026, 12, 5), 30))) == [(time(9), time(18))]
 
 
 def test_the_model_can_call_find_free_time():

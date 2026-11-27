@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
+from fake_deps import make_deps
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 import bot
@@ -54,7 +55,7 @@ def test_the_agent_asks_again_after_a_past_due():
         args = {'kind': 'reminder', 'text': 'I will remind you.', 'due': due.isoformat()}
         return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, args, tool_call_id=f'call_{len(requests)}')])
 
-    result = bot.agent.run_sync(PROMPT, model=FunctionModel(stand_in))
+    result = bot.agent.run_sync(PROMPT, model=FunctionModel(stand_in), deps=make_deps())  # since 2b: what the tools need
 
     assert len(requests) == 2, 'the past date was accepted: the model was never asked again'
     assert result.output.due == TOMORROW

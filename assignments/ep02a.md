@@ -8,6 +8,8 @@ The bot from the video reads your calendar through one tool, list_events. You ad
 
 No calendar address, no API key and no network are needed. Every test swaps bot.fetch_calendar for a small calendar written at the top of the test file, and a stand-in model plays a script of tool calls.
 
+Since episode 2b, the tools take what they need from deps, and these tests hand the bot a Deps whose http client serves that calendar instead of swapping bot.fetch_calendar. At the ep02a-start tag they are as described here.
+
 ## Before you start
 
 From the course folder, run the tests once. You should see 4 pass and 7 fail: the failing ones are your assignment.
