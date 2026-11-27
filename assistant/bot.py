@@ -1,4 +1,4 @@
-"""The assistant after episode 2b, with the solutions of the 1a, 1b and 2a assignments."""
+"""The assistant after episode 2b, with the solutions of the 1a, 1b, 2a and 2b assignments."""
 
 import asyncio
 import email
@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Annotated, Any, Literal
+from zoneinfo import ZoneInfo
 
 import httpx
 import icalendar
@@ -93,6 +94,17 @@ class Mailbox:
         emails = [to_email(meta, header) for meta, header in (part for part in data if isinstance(part, tuple))]
         return sorted(emails, key=lambda found: found.received, reverse=True)
 
+    def read(self, uid: int) -> str | None:
+        """The text of one email, or None if the folder has no email with that UID. It stays unread."""
+        with self.opened() as imap:
+            _, data = imap.uid('FETCH', str(uid), '(BODY.PEEK[])')  # PEEK: reading does not mark it read
+        raw = next((part[1] for part in data if isinstance(part, tuple)), None)
+        if raw is None:
+            return None
+        message = email.message_from_bytes(raw, policy=email.policy.default)
+        body = message.get_body(preferencelist=('plain', 'html'))  # the plain text part, if the email has one
+        return body.get_content() if body else ''
+
 
 @dataclass
 class Deps:
@@ -101,6 +113,7 @@ class Deps:
     http: httpx.AsyncClient
     calendar_url: str
     mailbox: Mailbox
+    tz: ZoneInfo  # the owner's time zone, not the machine's
 
 
 agent = Agent(
@@ -112,8 +125,8 @@ agent = Agent(
 
 
 @agent.instructions
-def now() -> str:
-    return f'The current time is {datetime.now().astimezone():%A %Y-%m-%d %H:%M %z}.'
+def now(ctx: RunContext[Deps]) -> str:
+    return f'The current time is {datetime.now(ctx.deps.tz):%A %Y-%m-%d %H:%M %z}.'
 
 
 class Event(BaseModel):
@@ -124,9 +137,11 @@ class Event(BaseModel):
     end: datetime | date
 
 
-def to_local(value: datetime | date) -> datetime | date:
-    """A time moves to the owner's time zone; an all-day date stays as it is."""
-    return value.astimezone() if isinstance(value, datetime) else value
+def to_local(value: datetime | date, tz: ZoneInfo) -> datetime | date:
+    """A time moves to the owner's time zone; a time without one (floating) is read there; a date stays."""
+    if not isinstance(value, datetime):
+        return value
+    return value.astimezone(tz) if value.tzinfo else value.replace(tzinfo=tz)
 
 
 async def fetch_calendar(deps: Deps) -> bytes:
@@ -149,10 +164,11 @@ async def list_events(ctx: RunContext[Deps], start: date, end: date) -> list[Eve
     if (end - start).days >= 31:
         raise ModelRetry('That is more than 31 days. Ask for 31 days or fewer at a time.')
     calendar = icalendar.Calendar.from_ical(await fetch_calendar(ctx.deps))
-    since = datetime.combine(start, time.min).astimezone()
-    until = datetime.combine(end + timedelta(days=1), time.min).astimezone()
+    tz = ctx.deps.tz
+    since = datetime.combine(start, time.min, tz)
+    until = datetime.combine(end + timedelta(days=1), time.min, tz)
     events = [
-        Event(title=str(found.get('SUMMARY', '')), start=to_local(found.start), end=to_local(found.end))
+        Event(title=str(found.get('SUMMARY', '')), start=to_local(found.start, tz), end=to_local(found.end, tz))
         for found in recurring_ical_events.of(calendar).between(since, until)
     ]
     return sorted(events, key=lambda event: (isinstance(event.start, datetime), event.start))
@@ -173,8 +189,8 @@ async def find_free_time(ctx: RunContext[Deps], day: date, minutes: int) -> list
         day: The day to look at.
         minutes: The shortest free time worth returning, in minutes.
     """
-    opens = datetime.combine(day, time(9)).astimezone()
-    closes = datetime.combine(day, time(18)).astimezone()
+    opens = datetime.combine(day, time(9), ctx.deps.tz)
+    closes = datetime.combine(day, time(18), ctx.deps.tz)
     long_enough = timedelta(minutes=minutes)
     free, cursor = [], opens
     for event in await list_events(ctx, day, day):
@@ -196,7 +212,21 @@ def search_email(ctx: RunContext[Deps], text: str, since: date) -> list[Email]:
         text: Words to look for in the sender, the subject and the body. Empty lists every email.
         since: The first day to look at.
     """
-    return ctx.deps.mailbox.search(text, since)
+    found = ctx.deps.mailbox.search(text, since)
+    return [e.model_copy(update={'received': e.received.astimezone(ctx.deps.tz)}) for e in found]
+
+
+@agent.tool
+def read_email(ctx: RunContext[Deps], uid: int) -> str:
+    """Read the text of one email that search_email found. The email stays unread.
+
+    Args:
+        uid: The email's uid, as search_email gave it.
+    """
+    text = ctx.deps.mailbox.read(uid)
+    if text is None:
+        raise ModelRetry(f'There is no email with uid {uid}. Use a uid that search_email returned.')
+    return text[:10_000]  # a long newsletter would crowd out everything else the model reads
 
 
 class Chat(BaseModel):
@@ -250,9 +280,10 @@ async def poll_once(telegram: httpx.AsyncClient, offset: int, deps: Deps) -> int
 async def main() -> None:
     url = f'https://api.telegram.org/bot{os.environ["TELEGRAM_BOT_TOKEN"]}/'
     calendar_url = os.environ['CALENDAR_ICS_URL']
+    tz = ZoneInfo(os.environ['TIME_ZONE'])  # such as America/Los_Angeles
     mailbox = Mailbox(os.environ['IMAP_HOST'], os.environ['IMAP_USER'], os.environ['IMAP_PASSWORD'], os.environ['IMAP_FOLDER'])
     async with httpx.AsyncClient(base_url=url, timeout=40) as telegram, httpx.AsyncClient(timeout=20) as http:
-        deps = Deps(http=http, calendar_url=calendar_url, mailbox=mailbox)
+        deps = Deps(http=http, calendar_url=calendar_url, mailbox=mailbox, tz=tz)
         offset = 0
         while True:
             offset = await poll_once(telegram, offset, deps)
